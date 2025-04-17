@@ -1,0 +1,13 @@
+/home/mspace/code/11mycode/Krpc/build/CMakeFiles/rebuild_cache.dir
+/home/mspace/code/11mycode/Krpc/build/CMakeFiles/edit_cache.dir
+/home/mspace/code/11mycode/Krpc/build/src/CMakeFiles/rebuild_cache.dir
+/home/mspace/code/11mycode/Krpc/build/src/CMakeFiles/edit_cache.dir
+/home/mspace/code/11mycode/Krpc/build/src/CMakeFiles/krpc_core.dir
+/home/mspace/code/11mycode/Krpc/build/example/CMakeFiles/rebuild_cache.dir
+/home/mspace/code/11mycode/Krpc/build/example/CMakeFiles/edit_cache.dir
+/home/mspace/code/11mycode/Krpc/build/example/callee/CMakeFiles/rebuild_cache.dir
+/home/mspace/code/11mycode/Krpc/build/example/callee/CMakeFiles/edit_cache.dir
+/home/mspace/code/11mycode/Krpc/build/example/callee/CMakeFiles/server.dir
+/home/mspace/code/11mycode/Krpc/build/example/caller/CMakeFiles/rebuild_cache.dir
+/home/mspace/code/11mycode/Krpc/build/example/caller/CMakeFiles/edit_cache.dir
+/home/mspace/code/11mycode/Krpc/build/example/caller/CMakeFiles/client.dir
