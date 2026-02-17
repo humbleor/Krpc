@@ -1,27 +1,69 @@
-#设置最低版本和项目名称
-cmake_minimum_required(VERSION 3.0)
-project(Krpc)
+# ============================================================================
+# Krpc - 分布式 RPC 框架
+# 基于 Protobuf, Muduo, Zookeeper, Glog
+# ============================================================================
 
-#设置全局的C++标准
-set(CMAKE_CXX_STANDARD 11)#在这里我设置了11，代表使用c++11标准
-set(CMAKE_CXX_STANDARD_REQUIRED True)#CMAKE_CXX_STANDARD_REQUIRED表示强制使用指定的标准
+cmake_minimum_required(VERSION 3.10)
+project(Krpc
+    VERSION 1.0.0
+    LANGUAGES CXX
+    DESCRIPTION "A distributed RPC framework based on protobuf"
+)
 
-#设置头文件目录，供所有子项目使用
-#include_directories(${CMAKE_SOURCE_DIR}/src/include) #其中CMAKE_SOURCE_DIR表示当前目录
+# ============================================================================
+# 全局编译设置
+# ============================================================================
 
-#查找porotbuf包
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# 设置默认构建类型
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+# 编译选项
+add_compile_options(-Wall -Wextra -Wpedantic)
+
+# ============================================================================
+# 依赖查找
+# ============================================================================
+
 find_package(Protobuf REQUIRED)
-include_directories(${Protobuf_INCLUDE_DIRS})#Protobuf_INCLUDE_DIRS表示protobuf头文件目录
+find_package(Threads REQUIRED)
 
-#设置全局链接库
-set(LIBS
-    protobuf
-    pthread
+# ============================================================================
+# 全局库列表 (用于外部依赖)
+# ============================================================================
+
+set(KRPC_EXTERNAL_LIBS
+    Threads::Threads
     zookeeper_mt
     muduo_net
     muduo_base
     glog
+    ${PROTOBUF_LIBRARIES}
 )
-#添加子目录
+
+# ============================================================================
+# 子目录
+# ============================================================================
+
 add_subdirectory(src)
 add_subdirectory(example)
+
+# 可选：测试目录
+option(KRPC_BUILD_TESTS "Build tests" OFF)
+if(KRPC_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+# ============================================================================
+# 安装配置
+# ============================================================================
+
+install(DIRECTORY include/ DESTINATION include)
+install(TARGETS krpc_core EXPORT krpc-targets)
+install(EXPORT krpc-targets FILE KrpcConfig.cmake DESTINATION lib/cmake/Krpc)

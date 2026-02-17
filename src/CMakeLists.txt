@@ -1,24 +1,50 @@
-# 除了可以直接使用CMAKE_CURRENT_SOURCE_DIR的相对路径，也可以使用get_filename_component来获取当前目录的绝对路径
-#这样就可以保证CMake 的某些操作可能需要使用绝对路径，尤其是跨目录的构建场景。绝对路径可以避免相对路径带来的混淆和潜在问题。
-#动态调整目录结构：如果项目目录层次较深，或者使用子模块或外部依赖，绝对路径可以方便地定位正确的文件，而不用担心路径拼接或依赖 CMake 的当前工作目录。
+# src/CMakeLists.txt
+# 构建核心 RPC 库 (krpc_core)
 
-#示例：
-#get_filename_component(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR} ABSOLUTE)
-#file(GLOB_RECURSE SRC_FILES ${SRC_DIR}/*.cc)
-#获取当前目录下的所有源文件
-file(GLOB SRC_FILES ${CMAKE_CURRENT_SOURCE_DIR}/*.cc)
+# ============================================================================
+# 源文件收集
+# ============================================================================
 
-# 获取 protobuf 的生成文件
-file(GLOB PROTO_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/*.pb.cc)
+file(GLOB KRPC_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/*.cc)
 
-#创建静态库或共享库
-add_library(krpc_core STATIC ${SRC_FILES} ${PROTO_SRCS})
+# ============================================================================
+# Protobuf 代码生成
+# ============================================================================
 
-#链接protobuf库
-target_link_libraries(krpc_core PUBLIC protobuf)
+# 生成 RPC 头文件
+protobuf_generate_cpp(KRPC_PROTO_SRCS KRPC_PROTO_HDRS Krpcheader.proto)
 
-#设置头文件的路径
-target_include_directories(krpc_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+# 生成用户服务定义 (example/user.proto)
+protobuf_generate_cpp(USER_PROTO_SRCS USER_PROTO_HDRS ${CMAKE_CURRENT_SOURCE_DIR}/../example/user.proto)
 
-# 添加编译选项
-target_compile_options(krpc_core PRIVATE -std=c++11 -Wall)
+# ============================================================================
+# 核心库目标
+# ============================================================================
+
+add_library(krpc_core STATIC
+    ${KRPC_SOURCES}
+    ${KRPC_PROTO_SRCS}
+    ${USER_PROTO_SRCS}
+)
+
+# ============================================================================
+# 目标属性
+# ============================================================================
+
+# 头文件路径
+target_include_directories(krpc_core
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${PROTOBUF_INCLUDE_DIRS}
+)
+
+# 链接库
+target_link_libraries(krpc_core
+    PUBLIC ${KRPC_EXTERNAL_LIBS}
+)
+
+# 编译特性
+target_compile_features(krpc_core PUBLIC cxx_std_11)
