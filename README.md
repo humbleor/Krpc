@@ -154,6 +154,40 @@ cd build && cmake .. -DKRPC_BUILD_BENCHMARKS=ON && make -j$(nproc)
 
 该结果表明客户端与服务端成功完成了一次 RPC 通信，包括服务调用、请求处理和结果返回，验证了框架的稳定性和功能性。
 
+## 基准测试
+### 序列化对比测试（ser_bench）
+
+**目的**：验证 Protobuf 相比 JSON 在体积和速度上的优势，用数据支撑 README 中的声明。
+
+**测试方法**：
+- 使用 `LoginRequest`（name="zhangsan", pwd="123456"）和 `RegisterRequest`（id=1001, name="zhangsan", pwd="123456"）作为测试样本
+- 对每种消息类型，分别用 Protobuf 和 JSON (jsoncpp) 执行 500,000 次序列化/反序列化
+- 记录总耗时、序列化后字节大小
+- Protobuf 和 JSON 分别连续执行（先跑完所有 Protobuf，再跑 JSON），避免 CPU 缓存交叉影响
+
+**运行方式**（无需启动服务器）：
+```bash
+./bin/ser_bench
+```
+
+![ser基准结果](./img/bench_ser.png)
+
+### RPC 端到端测试（rpc_bench）
+
+**目的**：测量 Krpc 框架在真实网络环境下的性能表现。
+
+- 在多个并发级别（1, 2, 4, 8, 16, 32 线程）下各发送 N 个请求
+- 每个请求经历完整链路：ZK 服务发现 → TCP 连接 → 序列化发送 → 服务端处理 → 接收响应 → 反序列化
+- 记录每个请求的延迟，计算 P50/P95/P99/QPS
+- 观察随着并发增加，吞吐是否线性增长、延迟是否可控
+
+**运行方式**：
+```bash
+# 需要先启动服务端: ./bin/server -i ./bin/test.conf
+./bin/rpc_bench -i ./bin/test.conf --concurrency 1,8,32 --requests 5000
+```
+
+![rpc基准结果](./img/bench_rpc.png)
 
 ## 总结
 - Krpc是一个基于protobuf的C++分布式网络通信框架，旨在简化微服务的部署与调用。
