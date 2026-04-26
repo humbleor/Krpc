@@ -59,38 +59,41 @@ cd Krpc
 
 第二步：生成项目可执行程序
 ```shell
-mkdir build && cd build && cmake .. && make -j${nproc} 
+mkdir -p build && cd build && cmake .. && make -j$(nproc) 
 ```
 
-第三步：然后进入到example文件夹下，找到user.proto文件执行以下命令,会生成user.pb.h和user.pb.cc：
+第三步：如果修改了 proto 文件，需要重新生成 C++ 代码：
 ```shell
-cd example
-protoc --cpp_out=. user.proto
+# 生成 user.pb.h 和 user.pb.cc
+protoc --cpp_out=example example/user.proto
+# 生成 Krpcheader.pb.h 和 Krpcheader.pb.cc
+protoc --cpp_out=src src/Krpcheader.proto
 ```
+然后重新执行第二步。
 
-第四步：进入到src文件下，找到Krpcheader.proto文件同样会生成如上pb.h和pb.cc文件
+第四步：运行 server 和 client
 ```shell
-cd src
-protoc --cpp_out=. Krpcheader.proto
+# 启动服务端
+cd bin && ./server -i ./test.conf
+
+# 启动客户端（另一个终端）
+cd bin && ./client -i ./test.conf
 ```
 
-第五步：进入到bin文件夹下,分别运行./server和./client，即可完成服务发布和调用。
+### 编译性能测试工具（可选）
 
-- 进入bin文件:
 ```shell
-cd bin
-```
-- server:
-```shell
-./server -i ./test.conf
+cd build && cmake .. -DKRPC_BUILD_BENCHMARKS=ON && make -j$(nproc)
+
+# 序列化对比测试（无需启动服务器）
+./bin/ser_bench
+
+# RPC 端到端性能测试（需要 server + ZK 运行）
+./bin/rpc_bench -i ./bin/test.conf
+./bin/rpc_bench -i ./bin/test.conf --concurrency 1,8,32 --requests 5000
 ```
 
-- client:
-```shell
-./client -i ./test.conf
-```
-
-**注意**： 需要重新编译只需要在build目录下执行MAKE -J${4} 即可。
+详细的性能测试方案和结果请参考 [BENCHMARK.md](./BENCHMARK.md)。
 
 
 ## 整体的框架
@@ -101,9 +104,13 @@ cd bin
 
 - **Zookeeper**：负责分布式环境的服务注册，记录服务所在的IP地址以及端口号，可动态地为调用端提供目标服务所在发布端的IP地址与端口号，方便服务所在IP地址变动的及时更新。
 
-- **TCP沾包问题处理**：定义服务发布端和调用端之间的消息传输格式，记录方法名和参数长度，防止沾包。
+- **TCP沾包问题处理**：定义服务发布端和调用端之间的消息传输格式（`RpcHeader` + varint32 长度前缀），记录方法名和参数长度，防止沾包。
 
-- **Glog日志库**：后续增加了Glog的日志库，进行异步的日志记录。
+- **Glog日志库**：后续增加了Glog的日志库，进行异步的日志记录。框架内所有调试/错误信息均通过 `LOG()` 宏输出，可通过 `FLAGS_minloglevel` 统一控制日志级别。
+
+- **连接复用**：`KrpcChannel` 支持 `set_reuse_connection(true)` 启用连接复用，避免每次 RPC 调用都执行 TCP 三次握手，生产环境建议启用以获得 2.4x QPS 提升。
+
+- **性能基准测试**：提供序列化对比（Protobuf vs JSON）和端到端 RPC 性能测试（延迟百分位 P50/P95/P99、QPS、连接开销分析）工具。详见 [BENCHMARK.md](./BENCHMARK.md)。
 
 
 

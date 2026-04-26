@@ -8,9 +8,8 @@ class KrpcChannel : public google::protobuf::RpcChannel
 {
 public:
     KrpcChannel(bool connectNow);
-    virtual ~KrpcChannel()
-    {
-    }
+    ~KrpcChannel() override;
+    void set_reuse_connection(bool reuse);
     void CallMethod(const ::google::protobuf::MethodDescriptor *method,
                     ::google::protobuf::RpcController *controller,
                     const ::google::protobuf::Message *request,
@@ -18,6 +17,7 @@ public:
                     ::google::protobuf::Closure *done) override; // override可以验证是否是虚函数
 private:
     int m_clientfd; // 存放客户端套接字
+    bool m_reuse;   // 是否复用连接（默认false，每次调用后关闭）
     std::string service_name;
     std::string m_ip;
     uint16_t m_port;

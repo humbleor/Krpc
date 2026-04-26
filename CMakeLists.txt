@@ -53,6 +53,12 @@ set(KRPC_EXTERNAL_LIBS
 add_subdirectory(src)
 add_subdirectory(example)
 
+# Optional: benchmark executables
+option(KRPC_BUILD_BENCHMARKS "Build benchmark tools" OFF)
+if(KRPC_BUILD_BENCHMARKS)
+    add_subdirectory(benchmark)
+endif()
+
 # 可选：测试目录
 option(KRPC_BUILD_TESTS "Build tests" OFF)
 if(KRPC_BUILD_TESTS)

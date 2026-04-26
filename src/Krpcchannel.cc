@@ -13,6 +13,19 @@
 
 std::mutex g_data_mutx; // 全局互斥锁，用于保护共享数据的线程安全
 
+KrpcChannel::~KrpcChannel()
+{
+    if (m_clientfd >= 0) {
+        close(m_clientfd);
+        m_clientfd = -1;
+    }
+}
+
+void KrpcChannel::set_reuse_connection(bool reuse)
+{
+    m_reuse = reuse;
+}
+
 // RPC调用的核心方法，负责将客户端的请求序列化并发送到服务端，同时接收服务端的响应
 void KrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
                              ::google::protobuf::RpcController *controller,
@@ -32,9 +45,9 @@ void KrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
         zkCli.Start();                                                                      // 连接ZooKeeper服务器
         std::string host_data = QueryServiceHost(&zkCli, service_name, method_name, m_idx); // 查询服务地址
         m_ip = host_data.substr(0, m_idx);                                                  // 从查询结果中提取IP地址
-        std::cout << "ip: " << m_ip << std::endl;
+        LOG(INFO) << "ip: " << m_ip;
         m_port = atoi(host_data.substr(m_idx + 1, host_data.size() - m_idx).c_str()); // 从查询结果中提取端口号
-        std::cout << "port: " << m_port << std::endl;
+        LOG(INFO) << "port: " << m_port;
 
         // 尝试连接服务器
         auto rt = newConnect(m_ip.c_str(), m_port);
@@ -94,9 +107,10 @@ void KrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
     // 发送RPC请求到服务器
     if (-1 == send(m_clientfd, send_rpc_str.c_str(), send_rpc_str.size(), 0))
     {
-        close(m_clientfd); // 发送失败，关闭socket
+        if (!m_reuse) close(m_clientfd); // 发送失败，关闭socket
+        m_clientfd = -1;
         char errtxt[512] = {};
-        std::cout << "send error: " << strerror_r(errno, errtxt, sizeof(errtxt)) << std::endl; // 打印错误信息
+        LOG(ERROR) << "send error: " << strerror_r(errno, errtxt, sizeof(errtxt)); // 打印错误信息
         controller->SetFailed(errtxt);                                                         // 设置错误信息
         return;
     }
@@ -106,8 +120,10 @@ void KrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
     int recv_size = 0;
     if (-1 == (recv_size = recv(m_clientfd, recv_buf, 1024, 0)))
     {
+        if (!m_reuse) close(m_clientfd);
+        m_clientfd = -1;
         char errtxt[512] = {};
-        std::cout << "recv error" << strerror_r(errno, errtxt, sizeof(errtxt)) << std::endl; // 打印错误信息
+        LOG(ERROR) << "recv error: " << strerror_r(errno, errtxt, sizeof(errtxt)); // 打印错误信息
         controller->SetFailed(errtxt);                                                       // 设置错误信息
         return;
     }
@@ -115,14 +131,19 @@ void KrpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor *method,
     // 将接收到的响应数据反序列化为response对象
     if (!response->ParseFromArray(recv_buf, recv_size))
     {
-        close(m_clientfd); // 反序列化失败，关闭socket
+        if (!m_reuse) close(m_clientfd);
+        m_clientfd = -1;
         char errtxt[512] = {};
-        std::cout << "parse error" << strerror_r(errno, errtxt, sizeof(errtxt)) << std::endl; // 打印错误信息
+        LOG(ERROR) << "parse error: " << strerror_r(errno, errtxt, sizeof(errtxt)); // 打印错误信息
         controller->SetFailed(errtxt);                                                        // 设置错误信息
         return;
     }
 
-    close(m_clientfd); // 关闭socket连接
+    // 如果未启用连接复用，关闭socket
+    if (!m_reuse) {
+        close(m_clientfd);
+        m_clientfd = -1;
+    }
 }
 
 // 创建新的socket连接
@@ -133,10 +154,14 @@ bool KrpcChannel::newConnect(const char *ip, uint16_t port)
     if (-1 == clientfd)
     {
         char errtxt[512] = {0};
-        std::cout << "socket error" << strerror_r(errno, errtxt, sizeof(errtxt)) << std::endl; // 打印错误信息
+        LOG(ERROR) << "socket error: " << strerror_r(errno, errtxt, sizeof(errtxt)); // 打印错误信息
         LOG(ERROR) << "socket error:" << errtxt;                                               // 记录错误日志
         return false;
     }
+
+    // 设置SO_REUSEADDR，避免TIME_WAIT导致的端口耗尽
+    int opt = 1;
+    setsockopt(clientfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     // 设置服务器地址信息
     struct sockaddr_in server_addr;
@@ -149,7 +174,7 @@ bool KrpcChannel::newConnect(const char *ip, uint16_t port)
     {
         close(clientfd); // 连接失败，关闭socket
         char errtxt[512] = {0};
-        std::cout << "connect error" << strerror_r(errno, errtxt, sizeof(errtxt)) << std::endl; // 打印错误信息
+        LOG(ERROR) << "connect error: " << strerror_r(errno, errtxt, sizeof(errtxt)); // 打印错误信息
         LOG(ERROR) << "connect server error" << errtxt;                                         // 记录错误日志
         return false;
     }
@@ -162,7 +187,7 @@ bool KrpcChannel::newConnect(const char *ip, uint16_t port)
 std::string KrpcChannel::QueryServiceHost(ZkClient *zkclient, std::string service_name, std::string method_name, int &idx)
 {
     std::string method_path = "/" + service_name + "/" + method_name; // 构造ZooKeeper路径
-    std::cout << "method_path: " << method_path << std::endl;
+    LOG(INFO) << "method_path: " << method_path;
 
     std::unique_lock<std::mutex> lock(g_data_mutx);                   // 加锁，保证线程安全
     std::string host_data_1 = zkclient->GetData(method_path.c_str()); // 从ZooKeeper获取数据
@@ -185,7 +210,7 @@ std::string KrpcChannel::QueryServiceHost(ZkClient *zkclient, std::string servic
 }
 
 // 构造函数，支持延迟连接
-KrpcChannel::KrpcChannel(bool connectNow) : m_clientfd(-1), m_idx(0)
+KrpcChannel::KrpcChannel(bool connectNow) : m_clientfd(-1), m_reuse(false), m_idx(0)
 {
     if (!connectNow)
     { // 如果不需要立即连接
